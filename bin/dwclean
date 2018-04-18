@@ -1,0 +1,195 @@
+#!/usr/bin/perl
+
+use 5.14.0;
+use strict;
+use warnings;
+use utf8;
+
+use open qw/:std :utf8/;
+
+use Getopt::Long qw(GetOptions);;
+use Pod::Usage qw(pod2usage);
+use Parse::CSV;
+use UUID::Tiny ':std';
+
+use DwC;
+
+package main;
+
+our $VERSION = "0.01";
+
+our ($dupes, $rigid, $triplet, $uuid, $verbose, %uniques);
+our ($quote, $escape, $separator);
+
+our $core = "occurrence";
+our $id = "occurrenceID";
+
+Getopt::Long::Configure ("bundling", "no_ignore_case", "auto_help");
+GetOptions(
+  'c|core=s' => sub {
+    my ($k, $v) = @_;
+    if($DwC::cores{$v}) {
+      $core = $v;
+      $id = $DwC::cores{$v};
+      $ENV{DWC_CORE} = $v;
+    } else {
+      print STDERR "Unknown core $v\n";
+      exit 1;
+    }
+  },
+  'd|disable=s' => sub { my ($k, $v) = @_; DwC->disable_plugin($v); },
+  'e|escape=s' => \$escape,
+  'H|handsoff' => \$ENV{DWC_HANDSOFF},
+  'k|kingdom=s' => \$ENV{DWC_KINGDOM},
+  'P|list-plugins' => sub {
+    print("Available plugins:\n");
+    for my $plugin (DwC::plugins) {
+      my $id = $plugin =~ s/DwC::Plugin:://r;
+      my $description = $plugin->description;
+      my @type;
+      push(@type, "clean") if $plugin->can("clean");
+      push(@type, "validate") if $plugin->can("validate");
+      push(@type, "judge") if $plugin->can("judge");
+      push(@type, "augment") if $plugin->can("augment");
+      print("  $id – $description (" . join(", ", @type) . ")\n");
+    };
+    exit 0;
+  },
+  'C|list-cores' => sub {
+    print("Available core types:\n");
+    foreach my $core (keys %DwC::Cores) {
+      print("  $core\n");
+    }
+    exit 0;
+  },
+  'q|quote=s' => \$quote,
+  'r|rigid' => \$rigid,
+  's|separator=s' => \$separator,
+  't|triplet' => \$triplet,
+  'u|add-uuids' => \$uuid,
+  'v|verbose' => \$verbose,
+  '2|duplicates' => \$dupes
+);
+
+my %options = (
+  handle => \*STDIN,
+  binary => 1,
+  names => 1,
+  sep_char => $separator || "\t",
+  quote_char => $quote || undef,
+  escape_char => $escape || undef,
+  encoding_in  => "utf8"
+);
+
+my $csv = Parse::CSV->new(%options);
+
+# allow plugins to modify the header row
+my @terms = $csv->fields;
+for my $plugin (DwC::plugins) {
+  next unless $plugin->can("terms");
+  my %seen = ();
+  @terms = grep { !$seen{$_}++ } @terms, $plugin->terms;
+}
+@terms = (@terms, @DwC::Auxiliary);
+say STDOUT join("\t", @terms);
+
+while (my $raw = $csv->fetch) {
+  my $dwc = DwC->new($raw, $csv->row);
+
+  $dwc->expand(@terms);
+
+  # creates triplet-based ids. Really only makes sense for occurrences...
+  if($triplet) {
+    $$dwc{$id} = "urn:catalog:" . $dwc->triplet;
+  }
+
+  # creates uuid based ids
+  if($uuid) {
+    $$dwc{$id} = "urn:uuid:" . create_uuid_as_string(UUID_V4);
+  }
+
+  # plugin-based data cleaning, validation and quality assessment
+  $dwc->clean();
+  $dwc->validate();
+  $dwc->judge();
+  $dwc->augment();
+  $dwc->unknown() if $rigid;
+
+  # check for duplicate ids
+  if($dupes) {
+    if($uniques{$$dwc{$id}}) {
+      say STDERR "Duplicate occurrenceID: $$dwc{$id}\n";
+      exit 1;
+    }
+    $uniques{$$dwc{$id}} = 1;
+  }
+
+  if (@{$$dwc{error}}) {
+    foreach my $error (@{$$dwc{error}}) {
+      say STDERR "Fatal error: $error->[0] ($error->[1])";
+    }
+    exit 1;
+  }
+
+  if($verbose && @{$$dwc{warning}}) {
+    foreach my $warning (@{$$dwc{warning}}) {
+      say STDERR "$$dwc{$id}: $warning->[0] ($warning->[1])";
+    }
+  }
+
+  eval {
+    $dwc->printcsv(\*STDOUT, \@terms);
+  };
+  if($@) {
+    say STDERR "Malformed input (line $$$dwc{_row}\n"
+  }
+}
+
+# Die on CSV errors
+if($csv->errstr) {
+  die($csv->errstr . "\n");
+}
+
+__END__
+
+=head1 NAME
+
+dwclean - clean and validate darwin core dsv data
+
+=head1 SYNOPSIS
+
+dwclean reads dsv darwin core data from stdin and outputs tsv
+
+dwclean [options]
+
+  Options:
+    -?          this brief help message
+    -C          list all core types
+    -P          list all active plugins
+    -r          don't allow non-dwc terms
+    -t          create triplet-based core ids
+    -u          generate uuid core ids
+    -v          verbose mode
+    -c value    set the core type – occurrence, taxon, event, measurement
+                or multimedia. default: occurrence.
+    -d value    disable a plugin
+    -e value    dsv escape character
+    -k value    only validate species names against this kingdom
+    -q value    dsv quote character
+    -s value    dsv delimiter. default: tab (\t)
+    -2          check for duplicate core ids
+
+=head1 AUTHOR
+
+umeldt
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2018 by umeldt
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.24.3 or,
+at your option, any later version of Perl 5 you may have available.
+
+=cut
+
