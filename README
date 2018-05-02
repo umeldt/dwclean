@@ -5,7 +5,27 @@ command line tool for cleaning and validating darwin core dsv files
 
 USAGE
 
-  $ dwclean < occurrence.txt
+  dwclean reads dsv darwin core data from stdin and outputs tsv
+
+  dwclean [options]
+
+    Options:
+      -?          this brief help message
+      -C          list all core types
+      -P          list all active plugins
+      -r          don't allow non-dwc terms
+      -t          create triplet-based core ids
+      -u          generate uuid core ids
+      -v          verbose mode
+      -b value    set the basis of record
+      -c value    set the core type – occurrence, taxon, event, measurement
+                  or multimedia. default: occurrence.
+      -d value    disable a plugin
+      -e value    dsv escape character
+      -k value    only validate species names against this kingdom
+      -q value    dsv quote character
+      -s value    dsv delimiter. default: tab (\t)
+      -2          check for duplicate core ids
 
 COPYRIGHT AND LICENCE
 
