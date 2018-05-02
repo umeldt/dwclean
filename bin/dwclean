@@ -26,6 +26,7 @@ our $id = "occurrenceID";
 
 Getopt::Long::Configure ("bundling", "no_ignore_case", "auto_help");
 GetOptions(
+  'b|basis=s' => \$ENV{DWC_BASIS},
   'c|core=s' => sub {
     my ($k, $v) = @_;
     if($DwC::cores{$v}) {
@@ -85,6 +86,9 @@ my $csv = Parse::CSV->new(%options);
 
 # allow plugins to modify the header row
 my @terms = $csv->fields;
+if($ENV{DWC_BASIS} && !grep(/^basisOfRecord$/, @terms)) {
+  unshift(@terms, "basisOfRecord");
+}
 for my $plugin (DwC::plugins) {
   next unless $plugin->can("terms");
   my %seen = ();
@@ -93,7 +97,9 @@ for my $plugin (DwC::plugins) {
 @terms = (@terms, @DwC::Auxiliary);
 say STDOUT join("\t", @terms);
 
+my $row = 0;
 while (my $raw = $csv->fetch) {
+  $row++;
   my $dwc = DwC->new($raw, $csv->row);
 
   $dwc->expand(@terms);
@@ -141,7 +147,7 @@ while (my $raw = $csv->fetch) {
     $dwc->printcsv(\*STDOUT, \@terms);
   };
   if($@) {
-    say STDERR "Malformed input (line $$$dwc{_row}\n"
+    die "Malformed input ($row: $@)\n"
   }
 }
 
@@ -170,6 +176,7 @@ dwclean [options]
     -t          create triplet-based core ids
     -u          generate uuid core ids
     -v          verbose mode
+    -b value    set the basis of record
     -c value    set the core type – occurrence, taxon, event, measurement
                 or multimedia. default: occurrence.
     -d value    disable a plugin
