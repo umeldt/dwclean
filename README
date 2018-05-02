@@ -1,11 +1,13 @@
 dwclean version 0.01
 ========================
 
-command line tool for cleaning and validating darwin core dsv files
+command line tool for cleaning and validating darwin core terms.
+
+reads dsv darwin core data from stdin and outputs tsv.
 
 USAGE
 
-  dwclean reads dsv darwin core data from stdin and outputs tsv
+  $ dwclean < occurrence.txt
 
   dwclean [options]
 
