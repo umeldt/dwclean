@@ -117,8 +117,8 @@ while (my $raw = $csv->fetch) {
   # plugin-based data cleaning, validation and quality assessment
   $dwc->clean();
   $dwc->validate();
-  $dwc->judge();
   $dwc->augment();
+  $dwc->judge();
   $dwc->unknown() if $rigid;
 
   # check for duplicate ids
