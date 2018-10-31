@@ -86,6 +86,7 @@ my $csv = Parse::CSV->new(%options);
 
 # allow plugins to modify the header row
 my @terms = $csv->fields;
+unshift(@terms, "dcterms:modified");
 if($ENV{DWC_BASIS} && !grep(/^basisOfRecord$/, @terms)) {
   unshift(@terms, "basisOfRecord");
 }
